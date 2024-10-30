@@ -1,3 +1,5 @@
+use dioxus_core_types::DioxusFormattable;
+
 use crate::innerlude::VProps;
 use crate::prelude::RenderError;
 use crate::{any_props::BoxedAnyProps, innerlude::ScopeState};
@@ -723,9 +725,9 @@ impl Attribute {
     ///
     /// "Volatile" refers to whether or not Dioxus should always override the value. This helps prevent the UI in
     /// some renderers stay in sync with the VirtualDom's understanding of the world
-    pub fn new(
+    pub fn new<T>(
         name: &'static str,
-        value: impl IntoAttributeValue,
+        value: impl IntoAttributeValue<T>,
         namespace: Option<&'static str>,
         volatile: bool,
     ) -> Attribute {
@@ -978,7 +980,7 @@ where
 }
 
 /// A value that can be converted into an attribute value
-pub trait IntoAttributeValue {
+pub trait IntoAttributeValue<T = ()> {
     /// Convert into an attribute value
     fn into_value(self) -> AttributeValue;
 }
@@ -1077,21 +1079,24 @@ where
     }
 }
 
-#[cfg(feature = "manganis")]
-impl IntoAttributeValue for manganis::ImageAsset {
+pub struct AnyFmtMarker;
+impl<T> IntoAttributeValue<AnyFmtMarker> for T
+where
+    T: DioxusFormattable,
+{
     fn into_value(self) -> AttributeValue {
-        self.path().to_string().into_value()
+        AttributeValue::Text(self.format().to_string())
     }
 }
 
 /// A trait for anything that has a dynamic list of attributes
 pub trait HasAttributes {
     /// Push an attribute onto the list of attributes
-    fn push_attribute(
+    fn push_attribute<T>(
         self,
         name: &'static str,
         ns: Option<&'static str>,
-        attr: impl IntoAttributeValue,
+        attr: impl IntoAttributeValue<T>,
         volatile: bool,
     ) -> Self;
 }

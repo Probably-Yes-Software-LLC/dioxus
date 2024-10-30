@@ -19,24 +19,6 @@ pub type LaunchFn = fn(fn() -> Element, Vec<ContextFn>, Vec<Box<dyn Any>>);
 /// A context function is a Send and Sync closure that returns a boxed trait object
 pub type ContextFn = Box<dyn Fn() -> Box<dyn Any> + Send + Sync + 'static>;
 
-#[cfg(any(
-    feature = "fullstack",
-    feature = "static-generation",
-    feature = "liveview"
-))]
-type ValidContext = SendContext;
-
-#[cfg(not(any(
-    feature = "fullstack",
-    feature = "static-generation",
-    feature = "liveview"
-)))]
-type ValidContext = UnsendContext;
-
-type SendContext = dyn Fn() -> Box<dyn Any + Send + Sync> + Send + Sync + 'static;
-
-type UnsendContext = dyn Fn() -> Box<dyn Any> + 'static;
-
 #[allow(clippy::redundant_closure)] // clippy doesnt doesn't understand our coercion to fn
 impl LaunchBuilder {
     /// Create a new builder for your application. This will create a launch configuration for the current platform based on the features enabled on the `dioxus` crate.
@@ -188,21 +170,35 @@ impl LaunchBuilder {
         self
     }
 
+    fn launch_inner(self, app: fn() -> Element) {
+        #[cfg(all(feature = "fullstack", any(feature = "desktop", feature = "mobile")))]
+        {
+            use dioxus_fullstack::prelude::server_fn::client::{get_server_url, set_server_url};
+            if get_server_url().is_empty() {
+                let serverurl = format!(
+                    "http://127.0.0.1:{}",
+                    std::env::var("PORT").unwrap_or_else(|_| "8080".to_string())
+                )
+                .leak();
+                set_server_url(serverurl);
+            }
+        }
+
+        let cfg = self.configs;
+        (self.launch_fn)(app, self.contexts, cfg);
+    }
+
     // Static generation is the only platform that may exit. We can't use the `!` type here
     #[cfg(any(feature = "static-generation", feature = "web"))]
     /// Launch your application.
     pub fn launch(self, app: fn() -> Element) {
-        let cfg = self.configs;
-
-        (self.launch_fn)(app, self.contexts, cfg)
+        self.launch_inner(app);
     }
 
     #[cfg(not(any(feature = "static-generation", feature = "web")))]
     /// Launch your application.
     pub fn launch(self, app: fn() -> Element) -> ! {
-        let cfg = self.configs;
-
-        (self.launch_fn)(app, self.contexts, cfg);
+        self.launch_inner(app);
         unreachable!("Launching an application will never exit")
     }
 }
