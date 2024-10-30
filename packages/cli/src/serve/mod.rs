@@ -1,6 +1,7 @@
 use std::future::{poll_fn, Future, IntoFuture};
 use std::task::Poll;
 
+use crate::builder::OpenArguments;
 use crate::cli::serve::Serve;
 use crate::dioxus_crate::DioxusCrate;
 use crate::tracer::CLILogControl;
@@ -17,6 +18,7 @@ mod hot_reloading_file_map;
 mod logs_tab;
 mod output;
 mod proxy;
+mod render;
 mod server;
 mod watcher;
 
@@ -157,7 +159,13 @@ pub async fn serve_all(
 
                         // If we have a build result, open it
                         for build_result in results.iter() {
-                            let child = build_result.open(&serve.server_arguments, server.fullstack_address(), &dioxus_crate.workspace_dir());
+                            let child = build_result.open(
+                                OpenArguments::new(
+                                &serve.server_arguments,
+                                server.fullstack_address(),
+                                &dioxus_crate
+                            )
+                            );
                             match child {
                                 Ok(Some(child_proc)) => builder.children.push((build_result.target_platform, child_proc)),
                                 Err(e) => {
@@ -176,12 +184,12 @@ pub async fn serve_all(
                         server.send_reload_command().await;
                     },
 
-                    // If the process exited *cleanly*, we can exit
+                    // If the desktop process exited *cleanly*, we can exit
                     Ok(BuilderUpdate::ProcessExited { status, target_platform }) => {
                         // Then remove the child process
                         builder.children.retain(|(platform, _)| *platform != target_platform);
-                        match status {
-                            Ok(status) => {
+                        match (target_platform, status) {
+                            (TargetPlatform::Desktop, Ok(status)) => {
                                 if status.success() {
                                     break;
                                 }
@@ -189,7 +197,9 @@ pub async fn serve_all(
                                     tracing::error!(dx_src = ?TraceSrc::Dev, "Application exited with status: {status}");
                                 }
                             },
-                            Err(e) => {
+                            // Ignore the static generation platform exiting
+                            (_ , Ok(_)) => {},
+                            (_, Err(e)) => {
                                 tracing::error!(dx_src = ?TraceSrc::Dev, "Application exited with error: {e}");
                             }
                         }

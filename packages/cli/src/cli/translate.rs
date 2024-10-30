@@ -1,4 +1,4 @@
-use std::process::exit;
+use std::{io::IsTerminal as _, process::exit};
 
 use dioxus_rsx::{BodyNode, CallBody, TemplateBody};
 
@@ -50,7 +50,7 @@ impl Translate {
 }
 
 pub fn convert_html_to_formatted_rsx(dom: &Dom, component: bool) -> String {
-    let callbody = rsx_rosetta::rsx_from_html(dom);
+    let callbody = dioxus_rsx_rosetta::rsx_from_html(dom);
 
     match component {
         true => write_callbody_with_icon_section(callbody),
@@ -61,7 +61,7 @@ pub fn convert_html_to_formatted_rsx(dom: &Dom, component: bool) -> String {
 fn write_callbody_with_icon_section(mut callbody: CallBody) -> String {
     let mut svgs = vec![];
 
-    rsx_rosetta::collect_svgs(&mut callbody.body.roots, &mut svgs);
+    dioxus_rsx_rosetta::collect_svgs(&mut callbody.body.roots, &mut svgs);
 
     let mut out = write_component_body(dioxus_autofmt::write_block_out(&callbody).unwrap());
 
@@ -121,7 +121,7 @@ fn determine_input(file: Option<String>, raw: Option<String>) -> Result<String> 
     }
 
     // If neither exist, we try to read from stdin
-    if atty::is(atty::Stream::Stdin) {
+    if std::io::stdin().is_terminal() {
         return custom_error!("No input file, source, or stdin to translate from.");
     }
 
@@ -129,13 +129,4 @@ fn determine_input(file: Option<String>, raw: Option<String>) -> Result<String> 
     std::io::stdin().read_to_string(&mut buffer).unwrap();
 
     Ok(buffer.trim().to_string())
-}
-
-#[test]
-fn generates_svgs() {
-    let st = include_str!("../../tests/svg.html");
-
-    let out = convert_html_to_formatted_rsx(&html_parser::Dom::parse(st).unwrap(), true);
-
-    println!("{}", out);
 }
