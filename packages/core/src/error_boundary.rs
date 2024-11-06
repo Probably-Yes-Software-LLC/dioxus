@@ -505,10 +505,13 @@ pub(crate) fn throw_into(error: impl Into<CapturedError>, scope: ScopeId) {
     }
 }
 
+pub trait FnErrorHandler: FnMut(ErrorContext) -> Element + Clone {}
+impl<F> FnErrorHandler for F where F: FnMut(ErrorContext) -> Element + Clone {}
+
 #[allow(clippy::type_complexity)]
 #[derive(Clone)]
-pub struct ErrorHandler(Rc<dyn Fn(ErrorContext) -> Element>);
-impl<F: Fn(ErrorContext) -> Element + 'static> From<F> for ErrorHandler {
+pub struct ErrorHandler(Rc<dyn FnErrorHandler>);
+impl<F: FnErrorHandler + 'static> From<F> for ErrorHandler {
     fn from(value: F) -> Self {
         Self(Rc::new(value))
     }
@@ -734,7 +737,7 @@ impl<
 /// They are similar to `try/catch` in JavaScript, but they only catch errors in the tree below them.
 /// Error boundaries are quick to implement, but it can be useful to individually handle errors in your components to provide a better user experience when you know that an error is likely to occur.
 #[allow(non_upper_case_globals, non_snake_case)]
-pub fn ErrorBoundary(props: ErrorBoundaryProps) -> Element {
+pub fn ErrorBoundary(mut props: ErrorBoundaryProps) -> Element {
     let error_boundary = use_hook(provide_error_boundary);
     let errors = error_boundary.errors();
     if errors.is_empty() {
@@ -754,6 +757,6 @@ pub fn ErrorBoundary(props: ErrorBoundaryProps) -> Element {
     } else {
         tracing::trace!("scope id: {:?}", current_scope_id());
         tracing::trace!("handling errors: {:?}", errors);
-        (props.handle_error.0)(error_boundary.clone())
+        (Rc::make_mut(&mut props.handle_error.0))(error_boundary.clone())
     }
 }
