@@ -9,6 +9,7 @@ use crate::{
     properties::ComponentFunction,
 };
 use crate::{Properties, ScopeId, VirtualDom};
+use std::borrow::Cow;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::vec;
@@ -912,16 +913,19 @@ impl IntoDynNode for () {
         DynamicNode::default()
     }
 }
+
 impl IntoDynNode for VNode {
     fn into_dyn_node(self) -> DynamicNode {
         DynamicNode::Fragment(vec![self])
     }
 }
+
 impl IntoDynNode for DynamicNode {
     fn into_dyn_node(self) -> DynamicNode {
         self
     }
 }
+
 impl<T: IntoDynNode> IntoDynNode for Option<T> {
     fn into_dyn_node(self) -> DynamicNode {
         match self {
@@ -930,68 +934,52 @@ impl<T: IntoDynNode> IntoDynNode for Option<T> {
         }
     }
 }
-impl IntoDynNode for &Element {
-    fn into_dyn_node(self) -> DynamicNode {
-        match self.as_ref() {
-            Ok(val) => val.into_dyn_node(),
-            _ => DynamicNode::default(),
-        }
-    }
-}
+
 impl IntoDynNode for Element {
     fn into_dyn_node(self) -> DynamicNode {
-        match self {
-            Ok(val) => val.into_dyn_node(),
-            _ => DynamicNode::default(),
-        }
+        self.ok().into_dyn_node()
     }
 }
-impl IntoDynNode for &Option<VNode> {
-    fn into_dyn_node(self) -> DynamicNode {
-        match self.as_ref() {
-            Some(val) => val.clone().into_dyn_node(),
-            _ => DynamicNode::default(),
-        }
-    }
-}
-impl IntoDynNode for &str {
-    fn into_dyn_node(self) -> DynamicNode {
-        DynamicNode::Text(VText {
-            value: self.to_string(),
-        })
-    }
-}
+
 impl IntoDynNode for String {
     fn into_dyn_node(self) -> DynamicNode {
         DynamicNode::Text(VText { value: self })
     }
 }
-impl IntoDynNode for Arguments<'_> {
+
+impl IntoDynNode for &str {
     fn into_dyn_node(self) -> DynamicNode {
-        DynamicNode::Text(VText {
-            value: self.to_string(),
-        })
+        self.to_string().into_dyn_node()
     }
 }
-impl IntoDynNode for &VNode {
+
+impl IntoDynNode for Arguments<'_> {
     fn into_dyn_node(self) -> DynamicNode {
-        DynamicNode::Fragment(vec![self.clone()])
+        self.to_string().into_dyn_node()
+    }
+}
+
+/// Blanket impl for reference types that are [ToOwned] ([Clone]) and [IntoDynNode]
+impl<T> IntoDynNode for &T
+where
+    T: ToOwned,
+    T::Owned: IntoDynNode,
+{
+    fn into_dyn_node(self) -> DynamicNode {
+        self.to_owned().into_dyn_node()
     }
 }
 
 pub trait IntoVNode {
     fn into_vnode(self) -> VNode;
 }
+
 impl IntoVNode for VNode {
     fn into_vnode(self) -> VNode {
         self
     }
 }
-impl IntoVNode for &VNode {
-    fn into_vnode(self) -> VNode {
-        self.clone()
-    }
-}
+
 impl IntoVNode for Element {
     fn into_vnode(self) -> VNode {
         match self {
@@ -1000,15 +988,8 @@ impl IntoVNode for Element {
         }
     }
 }
-impl IntoVNode for &Element {
-    fn into_vnode(self) -> VNode {
-        match self {
-            Ok(val) => val.into_vnode(),
-            _ => VNode::empty().unwrap(),
-        }
-    }
-}
-impl IntoVNode for Option<VNode> {
+
+impl<T: IntoVNode> IntoVNode for Option<T> {
     fn into_vnode(self) -> VNode {
         match self {
             Some(val) => val.into_vnode(),
@@ -1016,28 +997,15 @@ impl IntoVNode for Option<VNode> {
         }
     }
 }
-impl IntoVNode for &Option<VNode> {
+
+/// Blanket impl for reference types that are [ToOwned] ([Clone]) and [IntoVNode]
+impl<T> IntoVNode for &T
+where
+    T: ToOwned,
+    T::Owned: IntoVNode,
+{
     fn into_vnode(self) -> VNode {
-        match self.as_ref() {
-            Some(val) => val.clone().into_vnode(),
-            _ => VNode::empty().unwrap(),
-        }
-    }
-}
-impl IntoVNode for Option<Element> {
-    fn into_vnode(self) -> VNode {
-        match self {
-            Some(val) => val.into_vnode(),
-            _ => VNode::empty().unwrap(),
-        }
-    }
-}
-impl IntoVNode for &Option<Element> {
-    fn into_vnode(self) -> VNode {
-        match self.as_ref() {
-            Some(val) => val.clone().into_vnode(),
-            _ => VNode::empty().unwrap(),
-        }
+        self.to_owned().into_vnode()
     }
 }
 
@@ -1071,15 +1039,31 @@ impl IntoAttributeValue for AttributeValue {
     }
 }
 
-impl IntoAttributeValue for &str {
-    fn into_value(self) -> AttributeValue {
-        AttributeValue::Text(self.to_string())
-    }
-}
-
 impl IntoAttributeValue for String {
     fn into_value(self) -> AttributeValue {
         AttributeValue::Text(self)
+    }
+}
+
+impl IntoAttributeValue for &str {
+    fn into_value(self) -> AttributeValue {
+        self.to_string().into_value()
+    }
+}
+
+impl IntoAttributeValue for Arguments<'_> {
+    fn into_value(self) -> AttributeValue {
+        self.to_string().into_value()
+    }
+}
+
+impl<T> IntoAttributeValue for Cow<'_, T>
+where
+    T: ToOwned,
+    T::Owned: IntoAttributeValue,
+{
+    fn into_value(self) -> AttributeValue {
+        self.into_owned().into_value()
     }
 }
 
@@ -1162,12 +1146,6 @@ impl IntoAttributeValue for bool {
     }
 }
 
-impl IntoAttributeValue for Arguments<'_> {
-    fn into_value(self) -> AttributeValue {
-        AttributeValue::Text(self.to_string())
-    }
-}
-
 impl IntoAttributeValue for Rc<dyn AnyValue> {
     fn into_value(self) -> AttributeValue {
         AttributeValue::Any(self)
@@ -1180,6 +1158,17 @@ impl<T: IntoAttributeValue> IntoAttributeValue for Option<T> {
             Some(val) => val.into_value(),
             None => AttributeValue::None,
         }
+    }
+}
+
+/// Blanket impl for reference types that are [ToOwned] ([Clone]) and [IntoAttributeValue]
+impl<T> IntoAttributeValue for &T
+where
+    T: ToOwned,
+    T::Owned: IntoAttributeValue,
+{
+    fn into_value(self) -> AttributeValue {
+        self.to_owned().into_value()
     }
 }
 
