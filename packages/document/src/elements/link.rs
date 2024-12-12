@@ -5,13 +5,14 @@ use dioxus_html as dioxus_elements;
 #[non_exhaustive]
 #[derive(Clone, Props, PartialEq)]
 pub struct LinkProps {
+    /// Links are deduplicated by their href and rel attributes
     pub rel: Option<String>,
     pub media: Option<String>,
     pub title: Option<String>,
     pub disabled: Option<bool>,
     pub r#as: Option<String>,
     pub sizes: Option<String>,
-    /// Links are deduplicated by their href attribute
+    /// Links are deduplicated by their href and rel attributes
     pub href: Option<String>,
     pub crossorigin: Option<String>,
     pub referrerpolicy: Option<String>,
@@ -107,10 +108,20 @@ pub fn Link(props: LinkProps) -> Element {
     use_hook(|| {
         let document = document();
         let mut insert_link = document.create_head_component();
-        if let Some(href) = &props.href {
-            if !should_insert_link(href) {
-                insert_link = false;
+        
+        // Deduplicate links; treat links with relations as distinct from those without.
+        match (&props.href, &props.rel) {
+            (Some(href), Some(rel)) => {
+                if !should_insert_link(&format!("{href}:{rel}")) {
+                    insert_link = false;
+                }
             }
+            (Some(href), None) => {
+                if !should_insert_link(href) {
+                    insert_link = false;
+                }
+            }
+            _ => {}
         }
 
         if !insert_link {
