@@ -206,7 +206,7 @@ pub fn Link(props: LinkProps) -> Element {
         }
 
         // todo(jon): this is extra hacky for no reason - we should fix prevent default on Links
-        if do_default && is_external {
+        if do_default && (is_external || new_tab) {
             return;
         }
 
@@ -233,7 +233,7 @@ pub fn Link(props: LinkProps) -> Element {
     let liveview_prevent_default = {
         // If the event is a click with the left mouse button and no modifiers, prevent the default action
         // and navigate to the href with client side routing
-        router.include_prevent_default().then_some(
+        (router.include_prevent_default() && !new_tab).then_some(
             "if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault() }"
         )
     };
